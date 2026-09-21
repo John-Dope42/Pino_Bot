@@ -1,69 +1,69 @@
-# Pino_Bot
+# Discord Anti-Spam & Balance Bot
 
-Ein Discord-Bot mit zwei Funktionsbereichen:
+A Discord bot with two feature areas:
 
-- 🛡️ **Anti-Spam** – erkennt und meldet verdächtige Nachrichten, mit Risiko-Score, Captcha-Aufforderung und Mod-Benachrichtigung inkl. Timeout/Kick/Ban-Buttons.
-- 💰 **Guthaben-Anzeige** – zeigt automatisch im Spendenchannel das aktuelle Serverguthaben, das Monatsziel und die verbleibenden Tage bis zum Stichtag an, inklusive täglichem Rollen-Ping.
+- 🛡️ **Anti-Spam** – detects and flags suspicious messages, with a risk score, captcha challenge, and mod notifications including Timeout/Kick/Ban buttons.
+- 💰 **Balance Display** – automatically shows the current server credit, the monthly goal, and the days remaining until the deadline in a donation channel, including a daily role ping.
 
-Beide Teile laufen im selben Bot-Prozess und sind unabhängig voneinander.
+Both parts run in the same bot process and work independently of each other.
 
 ---
 
 ## Features
 
 ### Anti-Spam
-- Erkennung ähnlicher/wiederholter Nachrichten innerhalb eines Zeitfensters
-- Einfache Keyword-basierte Spam-Erkennung (ML_SPAM_DETECTION)
-- Risiko-Bewertung anhand des Account-Alters
-- Automatisches Captcha bei hohem Risiko
-- Mod-Benachrichtigung im konfigurierten Channel mit Buttons für Timeout, Kick und Ban
-- Protokollierung aller Fälle in `spam_logs.json`
+- Detects repeated/similar messages within a time window
+- Simple keyword-based spam detection (ML_SPAM_DETECTION)
+- Risk assessment based on account age
+- Automatic captcha challenge for high-risk users
+- Mod notification in a configured channel with Timeout, Kick, and Ban buttons
+- Logs all cases to `spam_logs.json`
 
-### Guthaben-Anzeige
-- Embed mit aktuellem Guthaben, Zielbetrag und Fortschrittsbalken
-- Zeigt korrekt an, wenn das Ziel überschritten wird (goldener Bonus-Balken + Extra-Betrag)
-- Automatische Berechnung der Tage bis zum nächsten Stichtag (z. B. jeweils der 8. des Monats)
-- `/guthaben setzen` – Betrag manuell eintragen (nur für Rollen mit „Server verwalten")
-- `/guthaben anzeigen` – aktuellen Stand privat einsehen
-- Tägliches automatisches Update zu einer festgelegten Uhrzeit, optional mit Rollen-Ping
-- Bearbeitet bestehende Nachrichten bei manuellen Updates (kein Spam), postet beim täglichen Ping bewusst eine neue Nachricht (damit die Benachrichtigung zuverlässig auslöst)
+### Balance Display
+- Embed showing current balance, target amount, and a progress bar
+- Correctly displays when the goal is exceeded (golden bonus bar + extra amount)
+- Automatically calculates the days remaining until the next deadline (e.g. the 8th of each month)
+- `/guthaben setzen` – manually set the balance (restricted to roles with "Manage Server")
+- `/guthaben anzeigen` – privately check the current status
+- Automatic daily update at a configured time, optionally with a role ping
+- Edits the existing message for manual updates (no spam), posts a new message for the daily ping (so the notification reliably triggers)
 
 ---
 
-## Voraussetzungen
+## Requirements
 
-- [Node.js](https://nodejs.org/) 18 oder neuer
-- Ein Discord-Bot-Account ([Developer Portal](https://discord.com/developers/applications))
-- Der Bot muss mit den Scopes `bot` **und** `applications.commands` auf den Server eingeladen werden
+- [Node.js](https://nodejs.org/) 18 or newer
+- A Discord bot account ([Developer Portal](https://discord.com/developers/applications))
+- The bot must be invited with both the `bot` **and** `applications.commands` scopes
 
 ---
 
 ## Installation
 
 ```bash
-git clone <dieses-repo>
+git clone <this-repo>
 cd anti-spam-bot
 npm install
 cp .env.example .env
 ```
 
-Anschließend `.env` mit den eigenen Werten ausfüllen (siehe unten).
+Then fill in `.env` with your own values (see below).
 
-### Slash-Commands registrieren
+### Register slash commands
 
-Einmalig ausführen, danach nur wieder nötig, wenn sich Commands ändern:
+Run once, and again only when commands change:
 
 ```bash
 node deploy-commands.js
 ```
 
-### Bot starten
+### Start the bot
 
 ```bash
 npm start
 ```
 
-Für den Dauerbetrieb empfiehlt sich ein Prozess-Manager wie [pm2](https://pm2.keymetrics.io/):
+For production use, a process manager like [pm2](https://pm2.keymetrics.io/) is recommended:
 
 ```bash
 npm install -g pm2
@@ -74,78 +74,78 @@ pm2 startup
 
 ---
 
-## Konfiguration (`.env`)
+## Configuration (`.env`)
 
 ```dotenv
-# ---- Bot-Zugang ----
-DISCORD_TOKEN=              # Bot-Token (Developer Portal -> Bot -> Reset Token)
+# ---- Bot access ----
+DISCORD_TOKEN=              # Bot token (Developer Portal -> Bot -> Reset Token)
 CLIENT_ID=                  # Application ID (Developer Portal -> General Information)
-GUILD_ID=                   # Server-ID (Rechtsklick auf Server -> ID kopieren)
+GUILD_ID=                   # Server ID (right-click server -> Copy ID)
 
 # ---- Admin / Moderation ----
-OWNER_ID=                   # Discord-User-ID des Bot-Owners
-MOD_CHANNEL_ID=              # Channel für Mod-Benachrichtigungen bei Spam-Verdacht
+OWNER_ID=                   # Discord user ID of the bot owner
+MOD_CHANNEL_ID=              # Channel for mod notifications on suspected spam
 
-# ---- Anti-Spam Einstellungen ----
-SPAM_DELETE=true             # Spam-Nachrichten automatisch löschen
-CAPTCHA_HIGH_RISK=true       # Bei hohem Risiko Captcha anfordern
-ML_SPAM_DETECTION=true       # Keyword-/ML-basierte Spam-Erkennung aktivieren
-NEW_ACCOUNT_AGE=4            # Accounts jünger als X Tage gelten als verdächtig
-SIMILAR_MESSAGE_THRESHOLD=3  # Gleiche Nachricht X-mal = Spam
+# ---- Anti-Spam settings ----
+SPAM_DELETE=true             # Automatically delete spam messages
+CAPTCHA_HIGH_RISK=true       # Require a captcha for high-risk users
+ML_SPAM_DETECTION=true       # Enable keyword/ML-based spam detection
+NEW_ACCOUNT_AGE=4            # Accounts younger than X days are considered suspicious
+SIMILAR_MESSAGE_THRESHOLD=3  # Same message X times = spam
 
-# ---- Guthaben-Anzeige ----
-GUTHABEN_CHANNEL_ID=         # Channel-ID des Spendenchannels
-GUTHABEN_ZIEL=54.70          # Zielbetrag in Euro
-GUTHABEN_TAG=8               # Tag im Monat, an dem das Ziel fällig ist
-GUTHABEN_UHRZEIT=9:00        # Uhrzeit der täglichen Aktualisierung (HH:MM)
-GUTHABEN_PING_ROLE_ID=       # Optional: Rolle, die beim täglichen Update gepingt wird
+# ---- Balance display ----
+GUTHABEN_CHANNEL_ID=         # Channel ID of the donation channel
+GUTHABEN_ZIEL=54.70          # Target amount in euros
+GUTHABEN_TAG=8               # Day of the month the goal is due
+GUTHABEN_UHRZEIT=9:00        # Time of the daily update (HH:MM)
+GUTHABEN_PING_ROLE_ID=       # Optional: role to ping on the daily update
 ```
 
-### IDs finden
+### Finding IDs
 
-- **Server-, Channel- und Rollen-IDs:** In Discord unter Einstellungen → Erweitert → **Entwicklermodus** aktivieren, dann per Rechtsklick auf Server/Channel/Rolle → „ID kopieren".
-- **CLIENT_ID (Application ID):** [Developer Portal](https://discord.com/developers/applications) → Anwendung auswählen → General Information.
+- **Server, channel, and role IDs:** In Discord, go to Settings → Advanced → enable **Developer Mode**, then right-click a server/channel/role → "Copy ID".
+- **CLIENT_ID (Application ID):** [Developer Portal](https://discord.com/developers/applications) → select your application → General Information.
 
-### Rollen-Ping aktivieren
+### Enabling the role ping
 
-Damit `GUTHABEN_PING_ROLE_ID` tatsächlich benachrichtigt, muss eine der beiden Bedingungen erfüllt sein:
-- Die Rolle ist auf „Jeder kann diese Rolle erwähnen" gestellt, **oder**
-- Der Bot hat die Berechtigung „@everyone, @here und alle Rollen erwähnen".
+For `GUTHABEN_PING_ROLE_ID` to actually notify members, one of these must be true:
+- The role is set to "Allow anyone to @mention this role", **or**
+- The bot has the "Mention @everyone, @here, and All Roles" permission.
 
 ---
 
-## Slash-Commands
+## Slash Commands
 
-| Befehl | Beschreibung | Berechtigung |
+| Command | Description | Permission |
 |---|---|---|
-| `/guthaben setzen betrag:<Zahl>` | Aktuelles Guthaben eintragen und Anzeige aktualisieren | Server verwalten |
-| `/guthaben anzeigen` | Aktuellen Stand privat einsehen | Server verwalten |
-| `/antispam` | Status der Anti-Spam-Funktion anzeigen | – |
+| `/guthaben setzen betrag:<number>` | Set the current balance and update the display | Manage Server |
+| `/guthaben anzeigen` | Privately view the current status | Manage Server |
+| `/antispam` | Show anti-spam status | – |
 
 ---
 
-## Projektstruktur
+## Project Structure
 
 ```
-├── index.js              # Einstiegspunkt, Discord-Client, Event-Handling
-├── config.js              # Zentrale Konfiguration (liest .env)
-├── messageCache.js        # Erkennung wiederholter/ähnlicher Nachrichten
-├── riskScore.js            # Risiko-Bewertung anhand Account-Alter
-├── mlSpam.js               # Keyword-basierte Spam-Erkennung
-├── captcha.js               # Captcha-Aufforderung bei hohem Risiko
-├── notify.js                # Mod-Benachrichtigung mit Timeout/Kick/Ban-Buttons
-├── logger.js                 # Protokollierung erkannter Spam-Fälle
-├── slashCommands.js          # Definition bestehender Slash-Commands
-├── guthaben.js                # Guthaben-Anzeige im Spendenchannel
-├── deploy-commands.js         # Registriert alle Slash-Commands bei Discord
-├── guthaben-data.json         # Persistente Speicherung des aktuellen Guthabens (wird automatisch angelegt)
-└── .env                        # Eigene Konfiguration (nicht einchecken!)
+├── index.js              # Entry point, Discord client, event handling
+├── config.js              # Central configuration (reads .env)
+├── messageCache.js        # Detection of repeated/similar messages
+├── riskScore.js            # Risk assessment based on account age
+├── mlSpam.js               # Keyword-based spam detection
+├── captcha.js               # Captcha challenge for high-risk users
+├── notify.js                # Mod notification with Timeout/Kick/Ban buttons
+├── logger.js                 # Logging of detected spam cases
+├── slashCommands.js          # Definition of existing slash commands
+├── guthaben.js                # Balance display in the donation channel
+├── deploy-commands.js         # Registers all slash commands with Discord
+├── guthaben-data.json         # Persistent storage of the current balance (created automatically)
+└── .env                        # Your own configuration (do not commit!)
 ```
 
 ---
 
-## Hinweise
+## Notes
 
-- `guthaben-data.json` und `.env` gehören in die `.gitignore` – sie enthalten Laufzeitdaten bzw. Zugangsdaten und sollten nicht ins Repository.
-- Nach Codeänderungen muss der Bot-Prozess neu gestartet werden (`npm start` bzw. `pm2 restart discord-bot`).
-- `deploy-commands.js` muss nur erneut ausgeführt werden, wenn sich die Slash-Command-Struktur ändert (neue Optionen, neue Commands) – nicht bei jedem normalen Codeupdate.
+- `guthaben-data.json` and `.env` belong in `.gitignore` – they contain runtime data and credentials respectively and should not be committed to the repository.
+- After code changes, the bot process must be restarted (`npm start` or `pm2 restart discord-bot`).
+- `deploy-commands.js` only needs to be re-run when the slash command structure changes (new options, new commands) – not on every regular code update.
