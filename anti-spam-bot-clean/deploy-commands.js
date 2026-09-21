@@ -1,7 +1,6 @@
 // deploy-commands.js
 // -------------------
-// Registriert die Slash-Commands bei Discord: sowohl die bereits im Projekt
-// vorhandenen (slashCommands.js) als auch den neuen /guthaben Befehl.
+// Registriert alle Befehle aus slashCommands.js sowie /guthaben.
 // Einmalig ausführen (und erneut nach jeder Änderung an den Commands):
 //   node deploy-commands.js
 //
@@ -27,5 +26,6 @@ const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
     console.log('Slash-Commands erfolgreich registriert!');
   } catch (error) {
     console.error('Fehler beim Registrieren der Slash-Commands:', error);
+    process.exitCode = 1;
   }
 })();

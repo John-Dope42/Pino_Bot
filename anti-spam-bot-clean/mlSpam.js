@@ -1,5 +1,4 @@
 export function mlCheck(message){
-  const spamKeywords = ['free', 'click', 'discord.gg', 'bit.ly'];
-  const content = message.content.toLowerCase();
-  return spamKeywords.some(word => content.includes(word));
+  const content = (message.content || '').toLowerCase();
+  return /\b(?:free|click)\b|\b(?:discord\.gg|bit\.ly)\b/i.test(content);
 }

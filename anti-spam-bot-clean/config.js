@@ -6,15 +6,17 @@ export const config = {
   modChannel: process.env.MOD_CHANNEL_ID,
   spamDelete: process.env.SPAM_DELETE === 'true',
   similarMessageThreshold: parseInt(process.env.SIMILAR_MESSAGE_THRESHOLD) || 4,
-  mlSpamDetection: process.env.ML_SPAM === 'true',
+  alertCooldownMs: parseInt(process.env.ALERT_COOLDOWN_MS) || 2 * 60 * 1000,
+  mlSpamDetection: process.env.ML_SPAM_DETECTION === 'true',
+  captchaHighRisk: process.env.CAPTCHA_HIGH_RISK === 'true',
   newAccountAge: parseInt(process.env.NEW_ACCOUNT_AGE) || 4,
   // Window (ms) used to group similar messages from the same user. Default: 15 minutes
   similarMessageWindow: parseInt(process.env.SIMILAR_MESSAGE_WINDOW) || 15 * 60 * 1000
   ,
   // Wenn true, wird die Moderations-Benachrichtigungsnachricht im Mod-Channel
   // auch dann gelöscht, wenn die Moderationsaktion (Kick/Ban/Timeout) fehlschlägt.
-  // Setze DELETE_MOD_MESSAGE_ON_FAILURE=false in der .env, um dies zu deaktivieren.
-  deleteModMessageOnFailure: process.env.DELETE_MOD_MESSAGE_ON_FAILURE !== 'false'
+  // Standard ist false; mit DELETE_MOD_MESSAGE_ON_FAILURE=true aktivieren.
+  deleteModMessageOnFailure: process.env.DELETE_MOD_MESSAGE_ON_FAILURE === 'true'
   ,
   // If set, users who have been on the guild longer than this (ms) will be
   // automatically put in timeout (10 minutes) when the anti-spam triggers.

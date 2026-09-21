@@ -1,0 +1,6 @@
+spam_logs.jsonl
+.env
+node_modules/
+guthaben-data.json
+antispam-settings.json
+logs/

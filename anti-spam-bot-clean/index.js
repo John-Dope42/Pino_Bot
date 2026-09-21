@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, Partials, Events, InteractionType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Events, InteractionType, PermissionFlagsBits } from 'discord.js';
 
 // Ephemeral response flag (Interaction response flags): 64
 const EPHEMERAL_FLAG = 64;
@@ -10,6 +10,10 @@ import { checkSpam } from './messageCache.js';
 import { evaluateRisk } from './riskScore.js';
 import { mlCheck } from './mlSpam.js';
 import { notifyMods } from './notify.js';
+import { sendCaptcha, handleCaptchaReply, isCaptchaPending, hasPassedCaptcha } from './captcha.js';
+import { logCase, logEvent } from './logger.js';
+import { findException, getAntiSpamSettings } from './antispamSettings.js';
+import { handleAntiSpamCommand } from './antispamCommands.js';
 import { registerGuthaben } from './guthaben.js'; // NEU: Guthaben-Anzeige im Spendenchannel
 
 const client = new Client({
@@ -17,7 +21,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.DirectMessages
   ],
   partials: [Partials.Channel]
 });
@@ -32,27 +37,52 @@ client.once(Events.ClientReady, () => {
 // Nachrichtenüberwachung
 client.on(Events.MessageCreate, async (message) => {
   if(message.author.bot) return;
+  if(!message.guild){
+    await handleCaptchaReply(message);
+    return;
+  }
+  const settings = getAntiSpamSettings();
+  if(await findException(message)) return;
+  if(settings.mode === 'active' && isCaptchaPending(message.guild.id, message.author.id)){
+    await message.delete().catch((error) => console.warn('Nachricht während Captcha-Prüfung konnte nicht gelöscht werden', error));
+    return;
+  }
 
   const risk = evaluateRisk(message.author);
+  const highRisk = risk.high && !(config.captchaHighRisk && hasPassedCaptcha(message.guild.id, message.author.id));
+  risk.high = highRisk;
   let isSpam = false;
 
   if(config.mlSpamDetection){
     isSpam = mlCheck(message);
   }
 
-  const spamResult = checkSpam(message);
+  const spamResult = checkSpam(message, { keywordSpam: isSpam });
   const similar = spamResult.isSpam;
   const similarMessages = spamResult.messages || [];
+  const shouldAlert = spamResult.shouldAlert;
 
-  // Verhalten:
-  // - Wenn mehrere gleiche Nachrichten erreicht sind (similar) oder hohes Risiko,
-  //   dann ggf. löschen und Mods benachrichtigen.
-  // - Wenn nur ML-Detection anschlägt, nur Mods benachrichtigen (kein automatisches Löschen).
-  if(similar || risk.high){
+  // Ein junges Konto allein ist kein Spam-Nachweis. Keywords und
+  // Wiederholungen werden gelöscht, wenn automatisches Löschen aktiv ist.
+  if(similar || isSpam){
+    const captchaStatus = settings.mode === 'active' && shouldAlert && config.captchaHighRisk && highRisk
+      ? await sendCaptcha(message)
+      : 'disabled';
+    const caseEntry = shouldAlert ? logCase({
+      guildId: message.guild.id,
+      channelId: message.channel.id,
+      messageId: message.id,
+      userId: message.author.id,
+      reasons: [similar && 'similar', isSpam && 'keyword'].filter(Boolean),
+      highRisk,
+      captcha: captchaStatus,
+      contentPreview: (message.content || '').slice(0, 200)
+    }) : null;
     // Auto-timeout: if member has been on the guild longer than configured age,
     // automatically timeout them for 10 minutes (if bot has sufficient hierarchy).
+    // Ein einzelner Keyword-Treffer bei einem älteren Konto löst keinen Timeout aus.
     try{
-      if(message.guild && config.autoTimeoutMemberAgeMs){
+      if(settings.mode === 'active' && shouldAlert && (similar || highRisk) && message.guild && config.autoTimeoutMemberAgeMs){
         const m = await message.guild.members.fetch(message.author.id).catch(() => null);
         if(m && m.joinedTimestamp){
           const age = Date.now() - m.joinedTimestamp;
@@ -71,6 +101,7 @@ client.on(Events.MessageCreate, async (message) => {
                 const timeoutDuration = useRepeat ? repeatTimeout : shortTimeout;
 
                 await m.timeout(timeoutDuration, useRepeat ? 'Repeat-offender timeout durch Anti-Spam' : 'Auto-timeout durch Anti-Spam');
+                logEvent({ type: 'moderation', guildId: message.guild.id, caseId: caseEntry?.id, userId: m.id, action: 'timeout', source: 'automatic', success: true, durationMs: timeoutDuration });
                 console.log(`Auto-timeout applied to ${m.user.tag} (${timeoutDuration/60000} min) (joined ${new Date(m.joinedTimestamp).toISOString()})`);
                 // record history timestamp for repeat-offender detection
                 autoTimeoutHistory.set(m.id, now);
@@ -97,14 +128,11 @@ client.on(Events.MessageCreate, async (message) => {
     }
 
     // continue with deletion/notification logic
-    if(config.spamDelete){
+    if(settings.mode === 'active' && config.spamDelete){
       try{
         console.log(`Deleting message ${message.id} by ${message.author.tag} (similar=${similar}, ml=${isSpam}, riskHigh=${risk.high})`);
         // Delete current message (best-effort)
         await message.delete().catch((e) => { if(!(e && e.code === 10008)) throw e; });
-
-        // Notify mods immediately to avoid delays
-        try{ await notifyMods(client, message, risk); }catch(e){ /* ignore */ }
 
         // Deletion worker: group stored messages by channel and use bulkDelete where possible
         const deleteSimilarMessages = async (messages) => {
@@ -183,7 +211,7 @@ client.on(Events.MessageCreate, async (message) => {
           return deleted;
         };
 
-        (async () => {
+        if(similar && shouldAlert) (async () => {
           try{
             // Live listener: delete incoming identical messages during active window
             const authorId = message.author.id;
@@ -286,22 +314,53 @@ client.on(Events.MessageCreate, async (message) => {
         }
       }
     }
-  } else if(isSpam){
-    await notifyMods(client, message, risk);
+    if(shouldAlert){
+      try{ await notifyMods(client, message, risk, { dmUser: settings.mode === 'active' && captchaStatus !== 'sent' && captchaStatus !== 'pending', caseId: caseEntry?.id }); }
+      catch(e){ console.warn('Mod-Benachrichtigung fehlgeschlagen', e); }
+    }
   }
 });
 
 // Button-Handler
 client.on(Events.InteractionCreate, async (interaction) => {
+  if(await handleAntiSpamCommand(interaction, client)) return;
   if(interaction.type !== InteractionType.MessageComponent) return;
 
   const { customId } = interaction;
   const guild = interaction.guild;
   if(!guild) return;
 
-  const userId = customId.split('_')[1];
+  const [action, userId, caseId] = customId.split('_');
+  const actionPermissions = {
+    timeout: PermissionFlagsBits.ModerateMembers,
+    kick: PermissionFlagsBits.KickMembers,
+    ban: PermissionFlagsBits.BanMembers,
+    ignore: PermissionFlagsBits.ManageMessages
+  };
+  if(!actionPermissions[action] || !userId) return;
+  if(interaction.message?.channelId !== config.modChannel){
+    return interaction.reply({ content: 'Diese Moderationsaktion ist nur im Mod-Kanal verfügbar.', flags: EPHEMERAL_FLAG });
+  }
+  if(!interaction.memberPermissions?.has(actionPermissions[action])){
+    return interaction.reply({ content: 'Du hast keine Berechtigung für diese Moderationsaktion.', flags: EPHEMERAL_FLAG });
+  }
+
+  // Ein Fehlalarm lässt sich auch dann bestätigen, wenn das Konto den Server verlassen hat.
+  if(action === 'ignore'){
+    logEvent({ type: 'moderation', guildId: guild.id, caseId, userId, actorId: interaction.user.id, action, source: 'button', success: true });
+    await interaction.reply({ content: 'Fall als Fehlalarm markiert.', flags: EPHEMERAL_FLAG });
+    await interaction.message.delete().catch(() => null);
+    return;
+  }
   const member = await guild.members.fetch(userId).catch(() => null);
   if(!member) return interaction.reply({ content: 'User nicht gefunden.', flags: EPHEMERAL_FLAG });
+  const actor = await guild.members.fetch(interaction.user.id).catch(() => null);
+  if(!actor) return interaction.reply({ content: 'Dein Serverprofil konnte nicht geprüft werden.', flags: EPHEMERAL_FLAG });
+  const targetPos = member.roles?.highest?.position || 0;
+  const actorPos = actor.roles?.highest?.position || 0;
+  if(member.id === actor.id || (actor.id !== guild.ownerId && targetPos >= actorPos)){
+    return interaction.reply({ content: 'Du kannst keine Aktion gegen dich selbst oder ein gleichrangiges beziehungsweise höheres Mitglied ausführen.', flags: EPHEMERAL_FLAG });
+  }
 
   // Debug logging and permission checks
   console.log(`Interaction received: ${customId} clicked by ${interaction.user.tag} targeting ${userId}`);
@@ -309,7 +368,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if(!botMember){
     console.warn('Could not fetch bot member for role checks');
   } else {
-    const targetPos = member.roles?.highest?.position || 0;
     const botPos = botMember.roles?.highest?.position || 0;
     if(member.id === guild.ownerId || targetPos >= botPos){
       console.warn(`Insufficient role hierarchy: botPos=${botPos} targetPos=${targetPos} owner=${member.id===guild.ownerId}`);
@@ -364,15 +422,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
       actionSucceeded = true;
       try{ await interaction.reply({ content: `${member.user.tag} wurde gebannt.`, flags: EPHEMERAL_FLAG }); }catch(e){ console.warn('Reply failed', e); }
     }
-    else if(customId.startsWith('ignore_')){
-      // 'Ignore' considered a successful moderator action (no moderation API call)
-      actionSucceeded = true;
-      try{ await interaction.reply({ content: `${member.user.tag} wird ignoriert.`, flags: EPHEMERAL_FLAG }); }catch(e){ console.warn('Reply failed', e); }
-    }
   }catch(err){
     console.error('Interaction action failed', err);
     try{ await interaction.reply({ content: 'Aktion fehlgeschlagen: ' + (err.message || err), flags: EPHEMERAL_FLAG }); }catch(e){}
   }finally{
+    logEvent({ type: 'moderation', guildId: guild.id, caseId, userId, actorId: interaction.user.id, action, source: 'button', success: actionSucceeded });
     // Lösche die Mod-Channel-Benachrichtigung, wenn die Aktion erfolgreich war
     // oder wenn der Admin/Moderator in der Konfiguration das Überschreiben erlaubt.
     if(actionSucceeded || config.deleteModMessageOnFailure){
