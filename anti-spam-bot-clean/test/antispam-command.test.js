@@ -262,14 +262,20 @@ test('Ein berechtigter Mod kann weiterhin den Ban-Button benutzen', async () => 
 });
 
 test('Fehlender Zugriff auf den Mod-Kanal wird als Fehler gemeldet', async () => {
-  await assert.rejects(
-    notifyMods(
-      { channels: { fetch: async () => { throw Object.assign(new Error('Missing Access'), { code: 50001 }); } } },
-      { author: { id: 'test-user' } },
-      { high: false }
-    ),
-    (error) => error.message.includes('Mod-Kanal nicht erreichbar') && error.cause?.code === 50001
-  );
+  const previousChannel = config.modChannel;
+  config.modChannel = 'test-mod-channel';
+  try {
+    await assert.rejects(
+      notifyMods(
+        { channels: { fetch: async () => { throw Object.assign(new Error('Missing Access'), { code: 50001 }); } } },
+        { author: { id: 'test-user' } },
+        { high: false }
+      ),
+      (error) => error.message.includes('Mod-Kanal nicht erreichbar') && error.cause?.code === 50001
+    );
+  } finally {
+    config.modChannel = previousChannel;
+  }
 });
 
 test('Beobachtungsmodus protokolliert und meldet, löscht aber nicht', async () => {

@@ -42,3 +42,13 @@ Antworten der Anti-Spam-Befehle sind nur für die aufrufende Person sichtbar. Di
 Vor einem Push prüfen, dass `.env` und `node_modules` **nicht im Git-Index** liegen. Eine `.gitignore` entfernt bereits versionierte Dateien nicht automatisch. Wenn ein Bot-Token jemals in Git eingecheckt wurde, im Discord Developer Portal ein neues Token erzeugen. Das alte Token kann auch nach Entfernen der Datei aus der aktuellen Version im Git-Verlauf stehen.
 
 Mit `npm test` laufen die lokalen Funktionstests. Für einen Testserver zuerst `/antispamdiagnose testmeldung:true` ausführen, danach eine einzelne Keyword-Nachricht und wiederholte gleiche Nachrichten testen. Beobachtungsmodus erlaubt einen Test ohne automatische Sanktionen.
+
+## Guthaben-Anzeige
+
+Der Bot veröffentlicht den aktuellen Guthabenstand jeden Tag zur Uhrzeit aus `GUTHABEN_UHRZEIT` (Standard `12:00`) als neue Nachricht im Kanal aus `GUTHABEN_CHANNEL_ID`. Die Rolle aus `GUTHABEN_PING_ROLE_ID` wird dabei standardmäßig nur montags und donnerstags erwähnt. Dadurch liegen zwischen den beiden wöchentlichen Pings abwechselnd drei und vier Tage.
+
+Mit `GUTHABEN_PING_TAGE=1,4` lassen sich die beiden Ping-Tage als ISO-Wochentage einstellen (`1` = Montag bis `7` = Sonntag). Fehlen genau zwei gültige Tage, verwendet der Bot Montag und Donnerstag. Manuelle Änderungen über `/guthaben setzen` aktualisieren die jüngste Guthaben-Nachricht ohne Rollenping.
+
+Am Tag aus `GUTHABEN_TAG` (Standard: der 8.) zieht der Bot das Monatsziel aus `GUTHABEN_ZIEL` (Standard: `54,70 €`) automatisch vom Guthaben ab. Reicht das Guthaben nicht aus, wird der negative Stand gespeichert und angezeigt. Ein gespeicherter Monatsmarker verhindert doppelte Abbuchungen nach einem Neustart. War der Bot über einen oder mehrere Stichtage offline, holt er die fehlenden Monatsabzüge beim nächsten Start nach.
+
+Beim ersten Start mit dieser Funktion legt der Bot nur den Ausgangsmonat fest und führt keine rückwirkende Abbuchung aus. Die erste echte Abbuchung erfolgt am nächsten Stichtag.
